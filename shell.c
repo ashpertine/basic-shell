@@ -1,5 +1,6 @@
 #include <limits.h>
 #include <pwd.h>
+#include <readline/readline.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,37 @@ int (*builtin_func[])(char **) = {&shell_cd, &shell_help, &shell_exit};
 
 size_t len_builtin_cmds() {
   return sizeof(builtin_cmds) / sizeof(builtin_cmds[0]);
+}
+
+char *get_prompt(void) {
+  char *curr_dir = malloc(sizeof(char) * PATH_MAX);
+  char *home_dir = getpwuid(getuid())->pw_dir;
+  char *caret = "> ";
+
+  if (getcwd(curr_dir, PATH_MAX) == NULL) {
+    perror("getcwd() error");
+    exit(EXIT_FAILURE);
+  }
+
+  size_t curr_dir_len = strlen(curr_dir);
+
+  for (size_t j = 0; home_dir[j] != '\0' && curr_dir[j] == home_dir[j]; j++) {
+    if (home_dir[j + 1] == '\0' &&
+        (curr_dir[j + 1] == '\0' || curr_dir[j + 1] == '/')) {
+      curr_dir[j] = '~';
+      memmove(curr_dir, curr_dir + j, curr_dir_len - j + 1);
+      break;
+    }
+  }
+
+  if (strcmp(curr_dir, (getpwuid(getuid())->pw_dir)) == 0) {
+    curr_dir[0] = '~';
+    curr_dir[1] = '\0';
+  }
+
+  curr_dir = strcat(curr_dir, caret);
+
+  return curr_dir;
 }
 
 int shell_cd(char **args) {
@@ -62,39 +94,18 @@ int shell_exit(char **args) { exit(EXIT_SUCCESS); }
 char *sh_read_line(void) {
   size_t read_buffer_limit = READ_LINE_LIMIT;
   size_t position = 0;
-  char *line = (char *)malloc(sizeof(char) * read_buffer_limit);
+  char *prompt = NULL;
+  char *line = NULL;
   int c = 0;
 
-  if (line == NULL) {
-    fprintf(stderr, "error allocating memory for read line");
-    exit(EXIT_FAILURE);
+  prompt = get_prompt(); // now in heap
+  line = readline(prompt);
+  if (line && *line) {
+    add_history(line);
   }
 
-  while (1) {
-    c = getchar();
-    if (c == EOF) {
-      if (position == 0) {
-        exit(EXIT_SUCCESS);
-      }
-      break;
-    } else if (c == '\n') {
-      break;
-    }
-    if (position >= read_buffer_limit) {
-      read_buffer_limit *= 2;
-      line = realloc(line, read_buffer_limit);
-
-      if (line == NULL) {
-        fprintf(stderr, "error reallocating memory for read line");
-        exit(EXIT_FAILURE);
-      }
-    }
-
-    line[position] = c;
-    position++;
-  }
-
-  line[position] = '\0';
+  free(prompt);
+  prompt = NULL;
 
   return line;
 }
@@ -105,7 +116,7 @@ char **sh_parse_line(char *line) {
   char *curr_arg;
   const char *delim = " \t\n\r\a";
 
-  char **args = (char **)malloc(sizeof(char *) * read_token_limit);
+  char **args = malloc(sizeof(char *) * read_token_limit);
 
   if (args == NULL) {
     fprintf(stderr, "error allocating memory for parse line");
@@ -175,40 +186,12 @@ int execute_cmd(char **args) {
   return launch_process(args);
 }
 
-void show_prompt(void) {
-  char curr_dir[PATH_MAX];
-  char *home_dir = getpwuid(getuid())->pw_dir;
-
-  if (getcwd(curr_dir, sizeof(curr_dir)) == NULL) {
-    perror("getcwd() error");
-    exit(EXIT_FAILURE);
-  }
-
-  size_t curr_dir_len = sizeof(curr_dir) / sizeof(curr_dir[0]);
-
-  for (size_t j = 0; home_dir[j] != '\0' && curr_dir[j] == home_dir[j]; j++) {
-    if (home_dir[j + 1] == '\0' &&
-        (curr_dir[j + 1] == '\0' || curr_dir[j + 1] == '/')) {
-      curr_dir[j] = '~';
-      memmove(curr_dir, curr_dir + j, curr_dir_len - j);
-      break;
-    }
-  }
-
-  if (strcmp(curr_dir, (getpwuid(getuid())->pw_dir)) == 0) {
-    curr_dir[0] = '~';
-    curr_dir[1] = '\0';
-  }
-  printf("%s > ", curr_dir);
-}
-
 int main() {
   char *line;
   char **args;
   int status = 1;
 
   while (status) {
-    show_prompt();
     line = sh_read_line();
     args = sh_parse_line(line);
     status = execute_cmd(args);

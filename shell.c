@@ -7,9 +7,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define READ_LINE_LIMIT 1024 // in characters
-#define READ_TOK_LIMIT 64    // in number of tokens
-#define CURR_DIR_LIMIT 32    // in characters
+#define READ_TOK_LIMIT 64 // in number of tokens
+#define CURR_DIR_LIMIT 32 // in characters
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -27,7 +26,7 @@ size_t len_builtin_cmds() {
 }
 
 char *get_prompt(void) {
-  char *curr_dir = malloc(sizeof(char) * PATH_MAX);
+  char *curr_dir = malloc(sizeof(char) * (PATH_MAX + 2));
   char *home_dir = getpwuid(getuid())->pw_dir;
   char *caret = "> ";
 
@@ -45,11 +44,6 @@ char *get_prompt(void) {
       memmove(curr_dir, curr_dir + j, curr_dir_len - j + 1);
       break;
     }
-  }
-
-  if (strcmp(curr_dir, (getpwuid(getuid())->pw_dir)) == 0) {
-    curr_dir[0] = '~';
-    curr_dir[1] = '\0';
   }
 
   curr_dir = strcat(curr_dir, caret);
@@ -92,11 +86,8 @@ int shell_help(char **args) {
 int shell_exit(char **args) { exit(EXIT_SUCCESS); }
 
 char *sh_read_line(void) {
-  size_t read_buffer_limit = READ_LINE_LIMIT;
-  size_t position = 0;
   char *prompt = NULL;
   char *line = NULL;
-  int c = 0;
 
   prompt = get_prompt(); // now in heap
   line = readline(prompt);
